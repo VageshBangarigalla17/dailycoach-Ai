@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import api from '../services/api';
 
 const AuthContext = createContext();
 
@@ -10,27 +11,32 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Mock sign up
-  function signUp(email, password, name) {
-    return new Promise((resolve) => {
-      const user = { uid: 'mock-uid-123', email, name: name || 'User' };
-      setCurrentUser(user);
-      localStorage.setItem('dailycoach_user', JSON.stringify(user));
-      resolve(user);
-    });
+  async function signUp(email, password, name) {
+    try {
+      const response = await api.post('/auth/register', { email, password, name });
+      const { user, token } = response.data;
+      const userWithToken = { ...user, token };
+      setCurrentUser(userWithToken);
+      localStorage.setItem('dailycoach_user', JSON.stringify(userWithToken));
+      return userWithToken;
+    } catch (error) {
+      throw error.response?.data?.message || 'Error signing up';
+    }
   }
 
-  // Mock sign in
-  function signIn(email, password) {
-    return new Promise((resolve) => {
-      const user = { uid: 'mock-uid-123', email, name: 'User' };
-      setCurrentUser(user);
-      localStorage.setItem('dailycoach_user', JSON.stringify(user));
-      resolve(user);
-    });
+  async function signIn(email, password) {
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { user, token } = response.data;
+      const userWithToken = { ...user, token };
+      setCurrentUser(userWithToken);
+      localStorage.setItem('dailycoach_user', JSON.stringify(userWithToken));
+      return userWithToken;
+    } catch (error) {
+      throw error.response?.data?.message || 'Error signing in';
+    }
   }
 
-  // Mock sign out
   function signOut() {
     return new Promise((resolve) => {
       setCurrentUser(null);
@@ -40,12 +46,33 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    // Check local storage for mock persistent login
-    const storedUser = localStorage.getItem('dailycoach_user');
-    if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser));
+    async function checkAuth() {
+      const storedUser = localStorage.getItem('dailycoach_user');
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          // Only verify if we have a token
+          if (parsed.token) {
+            const response = await api.get('/users/profile');
+            if (response.data.success) {
+              const validatedUser = { ...response.data.user, token: parsed.token };
+              setCurrentUser(validatedUser);
+              localStorage.setItem('dailycoach_user', JSON.stringify(validatedUser));
+            } else {
+              setCurrentUser(null);
+            }
+          } else {
+             setCurrentUser(null);
+          }
+        } catch (err) {
+          console.error("Token invalid or expired", err);
+          setCurrentUser(null);
+          localStorage.removeItem('dailycoach_user');
+        }
+      }
+      setLoading(false);
     }
-    setLoading(false);
+    checkAuth();
   }, []);
 
   const value = {

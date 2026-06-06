@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { useSchedule } from '../contexts/ScheduleContext';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 import { Plus, Edit2, Trash2, CheckCircle } from 'lucide-react';
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_MAP = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+const REV_DAY_MAP = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
 
 export default function ScheduleBuilder() {
-  const { schedules, addSchedule, updateSchedule, deleteSchedule } = useSchedule();
+  const [schedules, setSchedules] = useState([]);
   
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -14,6 +16,21 @@ export default function ScheduleBuilder() {
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
   const [selectedDays, setSelectedDays] = useState(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+
+  useEffect(() => {
+    fetchSchedules();
+  }, []);
+
+  const fetchSchedules = async () => {
+    try {
+      const res = await api.get('/schedules');
+      if (res.data.success) {
+        setSchedules(res.data.schedules);
+      }
+    } catch (error) {
+      console.error("Failed to fetch schedules:", error);
+    }
+  };
 
   const determineColor = (timeStr) => {
     const hour = parseInt(timeStr.split(':')[0], 10);
@@ -37,23 +54,33 @@ export default function ScheduleBuilder() {
       taskName,
       startTime,
       endTime,
-      days: selectedDays,
+      daysOfWeek: selectedDays.map(d => DAY_MAP[d]),
       color: determineColor(startTime)
     };
 
-    if (isEditing) {
-      await updateSchedule(editId, scheduleData);
-      setIsEditing(false);
-      setEditId(null);
-    } else {
-      await addSchedule(scheduleData);
-    }
+    try {
+      if (isEditing) {
+        const res = await api.patch(`/schedules/${editId}`, scheduleData);
+        if (res.data.success) {
+          setSchedules(prev => prev.map(s => s.id === editId ? res.data.schedule : s));
+          setIsEditing(false);
+          setEditId(null);
+        }
+      } else {
+        const res = await api.post('/schedules', scheduleData);
+        if (res.data.success) {
+          setSchedules(prev => [...prev, res.data.schedule]);
+        }
+      }
 
-    // Reset form
-    setTaskName('');
-    setStartTime('09:00');
-    setEndTime('10:00');
-    setSelectedDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+      // Reset form
+      setTaskName('');
+      setStartTime('09:00');
+      setEndTime('10:00');
+      setSelectedDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    } catch (error) {
+      console.error("Failed to save schedule:", error);
+    }
   };
 
   const handleEdit = (schedule) => {
@@ -62,18 +89,32 @@ export default function ScheduleBuilder() {
     setTaskName(schedule.taskName);
     setStartTime(schedule.startTime);
     setEndTime(schedule.endTime);
-    setSelectedDays(schedule.days);
+    setSelectedDays(schedule.daysOfWeek.map(d => REV_DAY_MAP[d]));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this schedule?")) {
-      await deleteSchedule(id);
+      try {
+        const res = await api.delete(`/schedules/${id}`);
+        if (res.data.success) {
+          setSchedules(prev => prev.filter(s => s.id !== id));
+        }
+      } catch (error) {
+        console.error("Failed to delete schedule:", error);
+      }
     }
   };
 
   const handleToggleActive = async (id, currentStatus) => {
-    await updateSchedule(id, { isActive: !currentStatus });
+    try {
+      const res = await api.patch(`/schedules/${id}`, { isActive: !currentStatus });
+      if (res.data.success) {
+        setSchedules(prev => prev.map(s => s.id === id ? res.data.schedule : s));
+      }
+    } catch (error) {
+      console.error("Failed to toggle schedule active status:", error);
+    }
   };
 
   return (
@@ -188,9 +229,9 @@ export default function ScheduleBuilder() {
                 </div>
                 
                 <div className="flex flex-wrap gap-1 mb-3">
-                  {schedule.days.map(day => (
-                    <span key={day} className="text-[10px] uppercase bg-slate-700 text-slate-300 px-2 py-0.5 rounded-sm">
-                      {day}
+                  {schedule.daysOfWeek && schedule.daysOfWeek.map(dayInt => (
+                    <span key={dayInt} className="text-[10px] uppercase bg-slate-700 text-slate-300 px-2 py-0.5 rounded-sm">
+                      {REV_DAY_MAP[dayInt]}
                     </span>
                   ))}
                 </div>

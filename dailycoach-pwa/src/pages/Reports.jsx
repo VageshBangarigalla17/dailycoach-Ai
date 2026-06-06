@@ -1,18 +1,44 @@
-import React from 'react';
-import { useSchedule } from '../contexts/ScheduleContext';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 import { Flame, Trophy, AlertTriangle } from 'lucide-react';
 
 export default function Reports() {
-  const { schedules } = useSchedule();
-
-  // Mock data for presentation
-  const streak = 5;
-  const completionRate = 85;
+  const [stats, setStats] = useState({
+    currentStreakDays: 0,
+    completionPercentageThisWeek: 0,
+    totalTasksCompleted: 0,
+    mostMissedTask: 'None'
+  });
   
+  const [schedules, setSchedules] = useState([]);
+
+  useEffect(() => {
+    const fetchReportsData = async () => {
+      try {
+        const [statsRes, schedulesRes] = await Promise.all([
+          api.get('/users/stats'),
+          api.get('/schedules')
+        ]);
+        
+        if (statsRes.data.success) {
+          setStats(statsRes.data.stats);
+        }
+        
+        if (schedulesRes.data.success) {
+          setSchedules(schedulesRes.data.schedules);
+        }
+      } catch (error) {
+        console.error("Failed to fetch reports data:", error);
+      }
+    };
+    
+    fetchReportsData();
+  }, []);
+
   const weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const mockHeatmapData = [
     'done', 'done', 'done', 'late', 'done', 'upcoming', 'upcoming'
-  ];
+  ]; // Still mock for visual heatmap since complex aggregation isn't fully built
 
   const getColorForStatus = (status) => {
     switch (status) {
@@ -35,7 +61,7 @@ export default function Reports() {
         <div>
           <p className="text-orange-200 text-sm font-medium mb-1">Current Streak</p>
           <div className="flex items-end">
-            <span className="text-4xl font-bold text-white mr-2">{streak}</span>
+            <span className="text-4xl font-bold text-white mr-2">{stats.currentStreakDays}</span>
             <span className="text-orange-200 font-medium mb-1 pb-0.5">Days</span>
           </div>
         </div>
@@ -75,7 +101,7 @@ export default function Reports() {
         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
           <div className="flex items-center justify-between mb-2">
             <Trophy size={18} className="text-done" />
-            <span className="text-2xl font-bold text-white">{completionRate}%</span>
+            <span className="text-2xl font-bold text-white">{stats.completionPercentageThisWeek}%</span>
           </div>
           <p className="text-xs text-slate-400">Completion Rate</p>
         </div>

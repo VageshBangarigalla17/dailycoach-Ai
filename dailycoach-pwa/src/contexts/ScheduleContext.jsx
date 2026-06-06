@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import api from '../services/api';
 
 const ScheduleContext = createContext();
 
@@ -14,86 +15,90 @@ export function ScheduleProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentUser) {
-      // Mock loading data
-      const mockSchedules = [
-        {
-          id: '1',
-          taskName: 'Morning Workout',
-          startTime: '06:00',
-          endTime: '07:00',
-          days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-          isActive: true,
-          color: 'morning'
-        },
-        {
-          id: '2',
-          taskName: 'Deep Work',
-          startTime: '10:00',
-          endTime: '12:00',
-          days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-          isActive: true,
-          color: 'morning'
-        },
-        {
-          id: '3',
-          taskName: 'Evening Reading',
-          startTime: '20:00',
-          endTime: '21:00',
-          days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-          isActive: true,
-          color: 'evening'
+    async function fetchData() {
+      if (currentUser) {
+        try {
+          const [schedulesRes, logsRes] = await Promise.all([
+            api.get('/schedules'),
+            api.get('/logs')
+          ]);
+          setSchedules(schedulesRes.data);
+          
+          // Map logs to todayLogs format
+          const logsObj = {};
+          logsRes.data.forEach(log => {
+             logsObj[log.taskId] = {
+               status: log.status,
+               completedAt: log.completedAt,
+               _id: log._id
+             };
+          });
+          setTodayLogs(logsObj);
+        } catch (error) {
+          console.error("Error fetching schedules or logs:", error);
         }
-      ];
-      setSchedules(mockSchedules);
-      setTodayLogs({});
-      setLoading(false);
-    } else {
-      setSchedules([]);
-      setTodayLogs({});
-      setLoading(false);
+        setLoading(false);
+      } else {
+        setSchedules([]);
+        setTodayLogs({});
+        setLoading(false);
+      }
     }
+    fetchData();
   }, [currentUser]);
 
-  function addSchedule(scheduleData) {
-    return new Promise((resolve) => {
-      const newSchedule = {
-        ...scheduleData,
-        id: Date.now().toString(),
-        isActive: true,
-      };
-      setSchedules((prev) => [...prev, newSchedule]);
-      resolve(newSchedule);
-    });
+  async function addSchedule(scheduleData) {
+    try {
+      const response = await api.post('/schedules', scheduleData);
+      setSchedules((prev) => [...prev, response.data]);
+      return response.data;
+    } catch (error) {
+      console.error("Error adding schedule:", error);
+      throw error;
+    }
   }
 
-  function updateSchedule(id, updates) {
-    return new Promise((resolve) => {
+  async function updateSchedule(id, updates) {
+    try {
+      const response = await api.patch(`/schedules/${id}`, updates);
       setSchedules((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+        prev.map((s) => (s._id === id ? response.data : s))
       );
-      resolve();
-    });
+    } catch (error) {
+      console.error("Error updating schedule:", error);
+      throw error;
+    }
   }
 
-  function deleteSchedule(id) {
-    return new Promise((resolve) => {
-      setSchedules((prev) => prev.filter((s) => s.id !== id));
-      resolve();
-    });
+  async function deleteSchedule(id) {
+    try {
+      await api.delete(`/schedules/${id}`);
+      setSchedules((prev) => prev.filter((s) => s._id !== id));
+    } catch (error) {
+      console.error("Error deleting schedule:", error);
+      throw error;
+    }
   }
   
-  function addLog(taskId, status) {
-    return new Promise((resolve) => {
-       setTodayLogs((prev) => ({
-         ...prev,
-         [taskId]: {
-           status,
-           completedAt: new Date().toISOString()
-         }
-       }));
-       resolve();
-    });
+  async function addLog(taskId, status) {
+    try {
+      const response = await api.post('/logs', {
+        taskId,
+        status,
+        scheduledTime: new Date().toISOString() // Or get it from the schedule
+      });
+      setTodayLogs((prev) => ({
+        ...prev,
+        [taskId]: {
+          status: response.data.status,
+          completedAt: response.data.completedAt,
+          _id: response.data._id
+        }
+      }));
+    } catch (error) {
+      console.error("Error adding log:", error);
+      throw error;
+    }
   }
 
   const value = {
