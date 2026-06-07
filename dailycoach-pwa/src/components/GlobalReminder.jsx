@@ -43,12 +43,36 @@ export default function GlobalReminder() {
     if (!currentUser) return;
 
     const socketUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api$/, '') || 'http://localhost:5000';
-    const socket = io(socketUrl);
+    let socket = io(socketUrl);
+
+    const initSocket = () => {
+      if (!socket.connected) {
+        console.log('[GlobalReminder] Reconnecting WebSocket...');
+        socket.connect();
+      }
+      socket.emit('register', currentUser.id || currentUser._id);
+    };
 
     socket.on('connect', () => {
       console.log('[GlobalReminder] Connected to WebSocket server');
-      socket.emit('register', currentUser.id || currentUser._id);
+      initSocket();
     });
+
+    // Mobile Connection Resilience: Reconnect on visibility change
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[GlobalReminder] App became visible. Checking WebSocket state...');
+        if (!socket.connected) {
+          console.log('[GlobalReminder] WebSocket is disconnected. Forcing reconnect...');
+          socket.connect();
+        } else {
+          // Send a ping to verify connection isn't a zombie (if server supports it)
+          // Alternatively, just trust the connected state for now, socket.io handles internal pings
+          console.log('[GlobalReminder] WebSocket appears connected.');
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const handleReminder = (data) => {
       if (activeReminderTaskRef.current) return;
@@ -71,8 +95,8 @@ export default function GlobalReminder() {
 
     // Listen for Service Worker messages (e.g. from clicking a push notification)
     const handleSWMessage = (event) => {
-      if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
-        console.log('[GlobalReminder] 📲 Service Worker trigger:', event.data);
+      if (event.data && event.data.type === 'WORKFLOW_WAKE') {
+        console.log('[GlobalReminder] 📲 Service Worker trigger (WORKFLOW_WAKE):', event.data);
         
         if (activeReminderTaskRef.current) return;
         
@@ -109,6 +133,7 @@ export default function GlobalReminder() {
 
     return () => {
       socket.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleSWMessage);
       }

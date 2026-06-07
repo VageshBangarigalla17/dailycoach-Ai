@@ -77,7 +77,7 @@ self.addEventListener('notificationclick', (event) => {
         if ('focus' in client) {
           client.focus();
           client.postMessage({
-            type: 'NOTIFICATION_CLICK',
+            type: 'WORKFLOW_WAKE',
             action: event.action || 'open',
             taskId: notifData.taskId || '',
             reminderType: notifData.type || 'reminder',

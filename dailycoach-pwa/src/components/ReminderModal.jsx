@@ -44,6 +44,7 @@ export default function ReminderModal({ task, userName, reminderType, voiceOptio
   const flowStartedRef = useRef(false);
   const responseProcessedRef = useRef(false);
   const autoStartAttemptsRef = useRef(0);
+  const wakeLockRef = useRef(null);
 
   // Stabilise onComplete reference so useEffect doesn't re-trigger
   const onCompleteRef = useRef(onComplete);
@@ -51,12 +52,16 @@ export default function ReminderModal({ task, userName, reminderType, voiceOptio
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // Cleanup on unmount — cancel any in-progress TTS/STT
+  // Cleanup on unmount — cancel any in-progress TTS/STT and release wake lock
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       stop();
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(console.warn);
+        wakeLockRef.current = null;
+      }
     };
   }, [stop]);
 
@@ -83,19 +88,48 @@ export default function ReminderModal({ task, userName, reminderType, voiceOptio
   }, [phase]);
 
   // ------------------------------------------------------------------
-  // Auto-close after "done" phase — 3 second delay
+  // Auto-close after "done" phase — 3 second delay + Wake Lock Release
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (phase !== 'done') return;
-
-    const autoCloseTimer = setTimeout(() => {
-      if (mountedRef.current) {
-        console.log('[ReminderModal] Auto-closing after done phase.');
-        onCloseRef.current();
+    if (phase === 'done') {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(console.warn);
+        wakeLockRef.current = null;
+        console.log('[ReminderModal] Screen Wake Lock released.');
       }
-    }, 3000);
 
-    return () => clearTimeout(autoCloseTimer);
+      const autoCloseTimer = setTimeout(() => {
+        if (mountedRef.current) {
+          console.log('[ReminderModal] Auto-closing after done phase.');
+          onCloseRef.current();
+        }
+      }, 3000);
+
+      return () => clearTimeout(autoCloseTimer);
+    }
+  }, [phase]);
+
+  // ------------------------------------------------------------------
+  // Handle visibility change to re-request Wake Lock if we were backgrounded
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && phase !== 'waiting' && phase !== 'done') {
+        if ('wakeLock' in navigator && wakeLockRef.current === null) {
+          try {
+            wakeLockRef.current = await navigator.wakeLock.request('screen');
+            console.log('[ReminderModal] Screen Wake Lock re-acquired on visibility change.');
+          } catch (err) {
+            console.warn('[ReminderModal] Wake Lock re-acquisition failed:', err);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [phase]);
 
   // ------------------------------------------------------------------
@@ -108,8 +142,8 @@ export default function ReminderModal({ task, userName, reminderType, voiceOptio
     flowStartedRef.current = true;
 
     try {
-      // STEP 0: Play beep to unlock audio context (works on both mobile & desktop)
-      await playBeep();
+      // STEP 0: Play beep and unlock audio context (synchronously for mobile)
+      playBeep().catch(err => console.warn('[ReminderModal] Beep failed:', err));
 
       // Also unlock speechSynthesis with a silent utterance (mobile requirement)
       if ('speechSynthesis' in window) {
@@ -117,6 +151,16 @@ export default function ReminderModal({ task, userName, reminderType, voiceOptio
         unlock.volume = 0;
         window.speechSynthesis.speak(unlock);
         console.log('[ReminderModal] Audio context unlocked via user gesture.');
+      }
+
+      // STEP 0.5: Request Wake Lock
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          console.log('[ReminderModal] Screen Wake Lock acquired.');
+        } catch (err) {
+          console.warn('[ReminderModal] Screen Wake Lock failed:', err);
+        }
       }
 
       // STEP 1: Generate AI message
