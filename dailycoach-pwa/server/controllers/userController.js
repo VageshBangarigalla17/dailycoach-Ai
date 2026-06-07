@@ -68,7 +68,7 @@ const saveFcmToken = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { fcmToken: token },
+      { $addToSet: { fcmTokens: token } },
       { new: true }
     );
 

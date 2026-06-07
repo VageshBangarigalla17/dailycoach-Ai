@@ -1,9 +1,12 @@
-importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
+import { precacheAndRoute } from 'workbox-precaching';
+import { initializeApp } from 'firebase/app';
+import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
 
-// We need to use the actual config here later when available.
-// The user will need to update this with their config.
-firebase.initializeApp({
+// 1. Let Workbox handle PWA Precaching (injected by Vite PWA)
+precacheAndRoute(self.__WB_MANIFEST || []);
+
+// 2. Initialize Firebase inside the unified SW
+const firebaseApp = initializeApp({
   apiKey: "AIzaSyD80JhZI83fu1jRq4tdnRPQnBd-OJkJ5YU",
   authDomain: "dailycoach-ai.firebaseapp.com",
   projectId: "dailycoach-ai",
@@ -12,10 +15,11 @@ firebase.initializeApp({
   appId: "1:945626958609:web:5a2e294752a474f4b55ab0"
 });
 
-const messaging = firebase.messaging();
+const messaging = getMessaging(firebaseApp);
 
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
+// 3. Handle Background Messages
+onBackgroundMessage(messaging, (payload) => {
+  console.log('[sw.js] Received background message ', payload);
 
   const notificationType = payload.data?.type || 'reminder';
   const taskName = payload.data?.taskName || 'Task';
@@ -43,7 +47,7 @@ messaging.onBackgroundMessage((payload) => {
     badge: '/icon-192.png',
     tag: `dailycoach-${notificationType}-${payload.data?.taskId || 'general'}`,
     renotify: true,
-    requireInteraction: notificationType === 'followup' || notificationType === 'second-chance',
+    requireInteraction: true,
     data: {
       ...payload.data,
       url: `/?openReminder=${payload.data?.taskId || ''}&type=${notificationType}&taskName=${encodeURIComponent(payload.data?.taskName || '')}&startTime=${payload.data?.startTime || ''}&endTime=${payload.data?.endTime || ''}`
@@ -57,9 +61,9 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// Handle notification click — open the app and route to the right modal
+// 4. Handle Notification Clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[firebase-messaging-sw.js] Notification clicked:', event.action, event.notification.data);
+  console.log('[sw.js] Notification clicked:', event.action, event.notification.data);
 
   event.notification.close();
 

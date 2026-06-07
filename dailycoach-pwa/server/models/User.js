@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   preferredVoiceSpeed: { type: Number, min: 0.5, max: 2.0, default: 1.0 },
   enableNotifications: { type: Boolean, default: true },
   timezone: { type: String, default: 'Asia/Kolkata' },
-  fcmToken: { type: String }
+  fcmTokens: [{ type: String }]
 }, {
   timestamps: true // Automatically adds createdAt and updatedAt
 });

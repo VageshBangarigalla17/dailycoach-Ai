@@ -23,13 +23,12 @@ export const getFCMToken = async () => {
     const messaging = await setupMessaging();
     if (!messaging) return null;
     
-    // Explicitly register the service worker so Vite PWA doesn't intercept the messaging SW
+    // Get the ALREADY REGISTERED Vite PWA service worker
     let registration;
     try {
-      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      await navigator.serviceWorker.ready;
+      registration = await navigator.serviceWorker.ready;
     } catch (swError) {
-      console.warn('Failed to register explicit messaging SW, falling back to default:', swError);
+      console.warn('Failed to get active service worker:', swError);
     }
     
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;

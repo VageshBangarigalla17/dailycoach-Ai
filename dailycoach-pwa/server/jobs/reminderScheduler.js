@@ -2,8 +2,10 @@ const Schedule = require('../models/Schedule');
 const DailyLog = require('../models/DailyLog');
 const admin = require('../config/firebaseAdmin');
 
-const sendPushNotification = async (fcmToken, type, schedule) => {
-  if (!admin || !fcmToken) return;
+const User = require('../models/User');
+
+const sendPushNotification = async (fcmTokens, type, schedule) => {
+  if (!admin || !fcmTokens || fcmTokens.length === 0) return;
 
   const payloadData = {
     type: String(type || ''),
@@ -13,40 +15,64 @@ const sendPushNotification = async (fcmToken, type, schedule) => {
     endTime: String(schedule.endTime || '')
   };
 
-  try {
-    await admin.messaging().send({
-      token: fcmToken,
-      data: payloadData,
-      android: {
-        priority: 'high'
+  const message = {
+    tokens: fcmTokens,
+    data: payloadData,
+    android: {
+      priority: 'high'
+    },
+    webpush: {
+      headers: {
+        Urgency: 'high',
+        TTL: '0'
       },
-      webpush: {
-        headers: {
-          Urgency: 'high'
+      notification: {
+        title: type === 'followup' ? 'DailyCoach Follow-up ⏰' : (type === 'second-chance' ? 'DailyCoach Final Check-in ⏰' : 'DailyCoach Reminder 🔔'),
+        body: type === 'followup' ? `Did you complete: ${schedule.taskName}?` : (type === 'second-chance' ? `Checking in on ${schedule.taskName}. Done?` : `Time for: ${schedule.taskName}`),
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        requireInteraction: true, // Always require interaction to prevent silent dismiss on mobile
+        data: {
+          ...payloadData,
+          url: `/?openReminder=${payloadData.taskId}&type=${payloadData.type}&taskName=${encodeURIComponent(payloadData.taskName)}&startTime=${payloadData.startTime}&endTime=${payloadData.endTime}`
         },
-        notification: {
-          title: type === 'followup' ? 'DailyCoach Follow-up ⏰' : (type === 'second-chance' ? 'DailyCoach Final Check-in ⏰' : 'DailyCoach Reminder 🔔'),
-          body: type === 'followup' ? `Did you complete: ${schedule.taskName}?` : (type === 'second-chance' ? `Checking in on ${schedule.taskName}. Done?` : `Time for: ${schedule.taskName}`),
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
-          requireInteraction: type === 'followup' || type === 'second-chance',
-          data: {
-            ...payloadData,
-            url: `/?openReminder=${payloadData.taskId}&type=${payloadData.type}&taskName=${encodeURIComponent(payloadData.taskName)}&startTime=${payloadData.startTime}&endTime=${payloadData.endTime}`
-          },
-          actions: type === 'followup' || type === 'second-chance' ? [
-            { action: 'yes', title: '✅ Yes, Done' },
-            { action: 'no', title: '❌ No, Missed' }
-          ] : [
-            { action: 'yes', title: '✅ OK, I\'ll Start' },
-            { action: 'no', title: '⏭️ Not Now' }
-          ]
-        }
+        actions: type === 'followup' || type === 'second-chance' ? [
+          { action: 'yes', title: '✅ Yes, Done' },
+          { action: 'no', title: '❌ No, Missed' }
+        ] : [
+          { action: 'yes', title: '✅ OK, I\'ll Start' },
+          { action: 'no', title: '⏭️ Not Now' }
+        ]
       }
-    });
-    console.log(`[FCM] Push notification (${type}) sent for "${schedule.taskName}" to token: ${fcmToken.substring(0, 10)}...`);
+    }
+  };
+
+  try {
+    const response = await admin.messaging().sendEachForMulticast(message);
+    console.log(`[FCM] Push notification (${type}) sent for "${schedule.taskName}". Success: ${response.successCount}, Failed: ${response.failureCount}`);
+    
+    if (response.failureCount > 0) {
+      const failedTokens = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          if (resp.error && (
+              resp.error.code === 'messaging/invalid-registration-token' ||
+              resp.error.code === 'messaging/registration-token-not-registered'
+          )) {
+            failedTokens.push(fcmTokens[idx]);
+          }
+        }
+      });
+
+      if (failedTokens.length > 0) {
+        console.log(`[FCM] Cleaning up ${failedTokens.length} invalid tokens for user ${schedule.userId.email || schedule.userId}`);
+        await User.findByIdAndUpdate(schedule.userId._id || schedule.userId, {
+          $pull: { fcmTokens: { $in: failedTokens } }
+        });
+      }
+    }
   } catch (error) {
-    console.error(`[FCM] Error sending push notification:`, error.message);
+    console.error(`[FCM] Error sending multicast notification:`, error.message);
   }
 };
 
@@ -93,8 +119,8 @@ const startScheduler = (io) => {
               io.to(userId).emit('reminder:start', payloadData);
               
               // Send FCM Push Notification (for Mobile/backgrounded app)
-              if (schedule.userId.fcmToken) {
-                sendPushNotification(schedule.userId.fcmToken, 'start', schedule);
+              if (schedule.userId.fcmTokens && schedule.userId.fcmTokens.length > 0) {
+                sendPushNotification(schedule.userId.fcmTokens, 'start', schedule);
               }
             }
           });
@@ -125,8 +151,8 @@ const startScheduler = (io) => {
               io.to(userId).emit('reminder:followup', payloadData);
               
               // Send FCM Push Notification
-              if (schedule.userId.fcmToken) {
-                sendPushNotification(schedule.userId.fcmToken, 'followup', schedule);
+              if (schedule.userId.fcmTokens && schedule.userId.fcmTokens.length > 0) {
+                sendPushNotification(schedule.userId.fcmTokens, 'followup', schedule);
               }
             }
           }
@@ -173,8 +199,8 @@ const startScheduler = (io) => {
                  
                  io.to(userId).emit('reminder:loop', payloadData);
                  
-                 if (schedule.userId.fcmToken) {
-                   sendPushNotification(schedule.userId.fcmToken, 'second-chance', schedule);
+                 if (schedule.userId.fcmTokens && schedule.userId.fcmTokens.length > 0) {
+                   sendPushNotification(schedule.userId.fcmTokens, 'second-chance', schedule);
                  }
                }
             }
