@@ -23,6 +23,24 @@ const sendPushNotification = async (fcmToken, type, schedule) => {
       webpush: {
         headers: {
           Urgency: 'high'
+        },
+        notification: {
+          title: type === 'followup' ? 'DailyCoach Follow-up ⏰' : (type === 'second-chance' ? 'DailyCoach Final Check-in ⏰' : 'DailyCoach Reminder 🔔'),
+          body: type === 'followup' ? `Did you complete: ${schedule.taskName}?` : (type === 'second-chance' ? `Checking in on ${schedule.taskName}. Done?` : `Time for: ${schedule.taskName}`),
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          requireInteraction: type === 'followup' || type === 'second-chance',
+          data: {
+            ...payloadData,
+            url: `/?openReminder=${payloadData.taskId}&type=${payloadData.type}&taskName=${encodeURIComponent(payloadData.taskName)}&startTime=${payloadData.startTime}&endTime=${payloadData.endTime}`
+          },
+          actions: type === 'followup' || type === 'second-chance' ? [
+            { action: 'yes', title: '✅ Yes, Done' },
+            { action: 'no', title: '❌ No, Missed' }
+          ] : [
+            { action: 'yes', title: '✅ OK, I\'ll Start' },
+            { action: 'no', title: '⏭️ Not Now' }
+          ]
         }
       }
     });
