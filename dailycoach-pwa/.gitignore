@@ -26,5 +26,6 @@ dist-ssr
 # Environment files
 .env
 server/.env
+server/config/serviceAccountKey.json
 
 .vercel

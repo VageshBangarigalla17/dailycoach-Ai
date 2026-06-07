@@ -1,6 +1,6 @@
 import { db, setupMessaging } from '../config/firebase';
 import { getToken } from 'firebase/messaging';
-import { doc, setDoc } from 'firebase/firestore';
+import api from './api';
 
 export const requestNotificationPermission = async () => {
   try {
@@ -58,11 +58,10 @@ export const getFCMToken = async () => {
 export const saveFCMToken = async (userId, token) => {
   try {
     if (!token) return;
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { fcmToken: token }, { merge: true });
-    console.log('FCM Token saved to user profile');
+    await api.post('/users/fcm-token', { token });
+    console.log('FCM Token saved to backend API');
   } catch (error) {
-    console.error('Error saving FCM Token to Firestore:', error);
+    console.error('Error saving FCM Token to backend:', error);
   }
 };
 

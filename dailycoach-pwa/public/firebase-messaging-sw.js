@@ -46,7 +46,7 @@ messaging.onBackgroundMessage((payload) => {
     requireInteraction: notificationType === 'followup' || notificationType === 'second-chance',
     data: {
       ...payload.data,
-      url: `/?openReminder=${payload.data?.taskId || ''}&type=${notificationType}`
+      url: `/?openReminder=${payload.data?.taskId || ''}&type=${notificationType}&taskName=${encodeURIComponent(payload.data?.taskName || '')}&startTime=${payload.data?.startTime || ''}&endTime=${payload.data?.endTime || ''}`
     },
     actions: notificationType !== 'summary' ? [
       { action: 'yes', title: notificationType === 'followup' || notificationType === 'second-chance' ? '✅ Yes, Done' : '✅ OK, I\'ll Start' },
@@ -77,7 +77,9 @@ self.addEventListener('notificationclick', (event) => {
             action: event.action || 'open',
             taskId: notifData.taskId || '',
             reminderType: notifData.type || 'reminder',
-            taskName: notifData.taskName || ''
+            taskName: notifData.taskName || '',
+            startTime: notifData.startTime || '',
+            endTime: notifData.endTime || ''
           });
           return;
         }

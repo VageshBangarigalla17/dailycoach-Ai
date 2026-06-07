@@ -15,6 +15,29 @@ export default function GlobalReminder() {
     activeReminderTaskRef.current = activeReminderTask;
   }, [activeReminderTask]);
 
+  // Handle Cold-Start Notification Clicks (when app is fully closed)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const taskId = params.get('openReminder');
+      
+      if (taskId && !activeReminderTaskRef.current) {
+        console.log('[GlobalReminder] 📲 Cold start URL trigger:', taskId);
+        setReminderType(params.get('type') || 'start');
+        setActiveReminderTask({
+          id: taskId,
+          _id: taskId,
+          taskName: params.get('taskName') || 'Task Reminder',
+          startTime: params.get('startTime') || '',
+          endTime: params.get('endTime') || ''
+        });
+        
+        // Clean up the URL without reloading the page
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -45,8 +68,34 @@ export default function GlobalReminder() {
     socket.on('reminder:followup', handleReminder);
     socket.on('reminder:loop', handleReminder);
 
+    // Listen for Service Worker messages (e.g. from clicking a push notification)
+    const handleSWMessage = (event) => {
+      if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+        console.log('[GlobalReminder] 📲 Service Worker trigger:', event.data);
+        
+        if (activeReminderTaskRef.current) return;
+        
+        // The service worker passes the payload data
+        setReminderType(event.data.reminderType || 'start');
+        setActiveReminderTask({
+          id: event.data.taskId,
+          _id: event.data.taskId,
+          taskName: event.data.taskName || 'Task Reminder',
+          startTime: event.data.startTime || '',
+          endTime: event.data.endTime || ''
+        });
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
+
     return () => {
       socket.disconnect();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
     };
   }, [currentUser]);
 

@@ -1,5 +1,30 @@
 const Schedule = require('../models/Schedule');
 const DailyLog = require('../models/DailyLog');
+const admin = require('../config/firebaseAdmin');
+
+const sendPushNotification = async (fcmToken, type, schedule) => {
+  if (!admin || !fcmToken) return;
+
+  const payload = {
+    data: {
+      type: type,
+      taskId: schedule._id.toString(),
+      taskName: schedule.taskName,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime
+    }
+  };
+
+  try {
+    await admin.messaging().send({
+      token: fcmToken,
+      data: payload.data
+    });
+    console.log(`[FCM] Push notification (${type}) sent for "${schedule.taskName}" to token: ${fcmToken.substring(0, 10)}...`);
+  } catch (error) {
+    console.error(`[FCM] Error sending push notification:`, error.message);
+  }
+};
 
 const startScheduler = (io) => {
   let lastTriggeredMinute = -1;
@@ -31,14 +56,22 @@ const startScheduler = (io) => {
             if (schedule.userId && schedule.userId.enableNotifications) {
               const userId = schedule.userId._id.toString();
               console.log(`[Scheduler] START Reminder for user ${schedule.userId.email}: "${schedule.taskName}" at ${schedule.startTime}`);
-              // Emit instant websocket event
-              io.to(userId).emit('reminder:start', {
+              
+              const payloadData = {
                 scheduleId: schedule._id,
                 taskName: schedule.taskName,
                 startTime: schedule.startTime,
                 endTime: schedule.endTime,
                 type: 'start'
-              });
+              };
+              
+              // Emit instant websocket event (for Desktop/active app)
+              io.to(userId).emit('reminder:start', payloadData);
+              
+              // Send FCM Push Notification (for Mobile/backgrounded app)
+              if (schedule.userId.fcmToken) {
+                sendPushNotification(schedule.userId.fcmToken, 'start', schedule);
+              }
             }
           });
         }
@@ -55,14 +88,22 @@ const startScheduler = (io) => {
             if (schedule.userId && schedule.userId.enableNotifications) {
               const userId = schedule.userId._id.toString();
               console.log(`[Scheduler] FOLLOW-UP Reminder for user ${schedule.userId.email}: "${schedule.taskName}" ended at ${schedule.endTime}`);
-              // Emit instant websocket event
-              io.to(userId).emit('reminder:followup', {
+              
+              const payloadData = {
                 scheduleId: schedule._id,
                 taskName: schedule.taskName,
                 startTime: schedule.startTime,
                 endTime: schedule.endTime,
                 type: 'followup'
-              });
+              };
+
+              // Emit instant websocket event
+              io.to(userId).emit('reminder:followup', payloadData);
+              
+              // Send FCM Push Notification
+              if (schedule.userId.fcmToken) {
+                sendPushNotification(schedule.userId.fcmToken, 'followup', schedule);
+              }
             }
           }
         }
@@ -97,13 +138,20 @@ const startScheduler = (io) => {
                if (schedule.userId && schedule.userId.enableNotifications) {
                  const userId = schedule.userId._id.toString();
                  console.log(`[Scheduler] SECOND-CHANCE Reminder (Loop) for user ${schedule.userId.email}: "${schedule.taskName}" ended ${currentMins - endMins} mins ago`);
-                 io.to(userId).emit('reminder:loop', {
+                 
+                 const payloadData = {
                    scheduleId: schedule._id,
                    taskName: schedule.taskName,
                    startTime: schedule.startTime,
                    endTime: schedule.endTime,
-                   type: 'loop'
-                 });
+                   type: 'second-chance'
+                 };
+                 
+                 io.to(userId).emit('reminder:loop', payloadData);
+                 
+                 if (schedule.userId.fcmToken) {
+                   sendPushNotification(schedule.userId.fcmToken, 'second-chance', schedule);
+                 }
                }
             }
           }
