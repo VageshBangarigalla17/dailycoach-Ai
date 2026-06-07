@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { User, Volume2, Bell, LogOut, Save, Play, CheckCircle } from 'lucide-react';
 import * as voiceService from '../services/voiceService';
+import { requestNotificationPermission, getFCMToken, saveFCMToken } from '../services/notificationService';
 
 export default function Settings() {
   const { currentUser, signOut } = useAuth();
@@ -35,15 +36,23 @@ export default function Settings() {
     }
   };
 
-  const handleNotificationRequest = () => {
-    if ('Notification' in window) {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          alert('Notifications enabled!');
+  const handleNotificationRequest = async () => {
+    const isGranted = await requestNotificationPermission();
+    if (isGranted) {
+      try {
+        const token = await getFCMToken();
+        if (token && currentUser) {
+          await saveFCMToken(currentUser.id || currentUser._id, token);
+          alert('Notifications enabled and device registered successfully!');
+        } else {
+          alert('Notifications enabled, but failed to get device token.');
         }
-      });
+      } catch (error) {
+        console.error('Error setting up FCM:', error);
+        alert('Notifications enabled, but an error occurred during registration.');
+      }
     } else {
-      alert('This browser does not support notifications.');
+      alert('Notification permission was not granted.');
     }
   };
 

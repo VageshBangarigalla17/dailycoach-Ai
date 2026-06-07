@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import ReminderModal from './ReminderModal';
 import api from '../services/api';
 import confetti from 'canvas-confetti';
+import { getFCMToken, saveFCMToken } from '../services/notificationService';
 
 export default function GlobalReminder() {
   const { currentUser } = useAuth();
@@ -90,6 +91,21 @@ export default function GlobalReminder() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', handleSWMessage);
     }
+
+    // Auto-sync FCM Token if permission is already granted
+    const syncToken = async () => {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          const token = await getFCMToken();
+          if (token) {
+            await saveFCMToken(currentUser.id || currentUser._id, token);
+          }
+        } catch (error) {
+          console.error('[GlobalReminder] Failed to auto-sync FCM token:', error);
+        }
+      }
+    };
+    syncToken();
 
     return () => {
       socket.disconnect();
