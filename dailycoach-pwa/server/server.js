@@ -44,6 +44,13 @@ io.on('connection', (socket) => {
     socket.join(userId);
   });
 
+  socket.on('ping', (data, callback) => {
+    console.log('Ping received from:', socket.id);
+    if (typeof callback === 'function') {
+      callback({ status: 'pong' });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });

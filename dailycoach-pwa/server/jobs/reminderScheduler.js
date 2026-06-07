@@ -23,7 +23,7 @@ const sendPushNotification = async (fcmTokens, type, schedule) => {
     },
     webpush: {
       headers: {
-        Urgency: 'high',
+        urgency: 'high',
         TTL: '0'
       },
       notification: {
@@ -31,7 +31,8 @@ const sendPushNotification = async (fcmTokens, type, schedule) => {
         body: type === 'followup' ? `Did you complete: ${schedule.taskName}?` : (type === 'second-chance' ? `Checking in on ${schedule.taskName}. Done?` : `Time for: ${schedule.taskName}`),
         icon: '/icon-192.png',
         badge: '/icon-192.png',
-        requireInteraction: true, // Always require interaction to prevent silent dismiss on mobile
+        requireInteraction: true,
+        tag: `task-${schedule._id.toString()}`,
         data: {
           ...payloadData,
           url: `/?openReminder=${payloadData.taskId}&type=${payloadData.type}&taskName=${encodeURIComponent(payloadData.taskName)}&startTime=${payloadData.startTime}&endTime=${payloadData.endTime}`

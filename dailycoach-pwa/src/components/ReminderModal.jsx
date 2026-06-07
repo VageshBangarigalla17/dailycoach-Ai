@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Mic, MicOff, Check, X, Loader2, Volume2, AlertCircle } from 'lucide-react';
 import { useVoice } from '../hooks/useVoice';
 import { showLocalNotification } from '../services/notificationService';
+import { useVoiceUnlock } from '../hooks/useVoiceUnlock';
 
 /**
  * ReminderModal — Full-screen voice conversation overlay.
@@ -132,26 +133,24 @@ export default function ReminderModal({ task, userName, reminderType, voiceOptio
     };
   }, [phase]);
 
+  const { isUnlocked, unlockAudio } = useVoiceUnlock();
+
   // ------------------------------------------------------------------
   // Unlock audio + start the conversation flow
-  // Mobile browsers require a user gesture before speechSynthesis works.
-  // Desktop browsers auto-start with aggressive retry.
   // ------------------------------------------------------------------
   const startFlow = useCallback(async () => {
     if (flowStartedRef.current) return;
     flowStartedRef.current = true;
 
     try {
-      // STEP 0: Play beep and unlock audio context (synchronously for mobile)
-      playBeep().catch(err => console.warn('[ReminderModal] Beep failed:', err));
-
-      // Also unlock speechSynthesis with a silent utterance (mobile requirement)
-      if ('speechSynthesis' in window) {
-        const unlock = new SpeechSynthesisUtterance('');
-        unlock.volume = 0;
-        window.speechSynthesis.speak(unlock);
-        console.log('[ReminderModal] Audio context unlocked via user gesture.');
+      // STEP 0: Unlock audio explicitly via the new hook
+      const unlocked = await unlockAudio();
+      if (!unlocked) {
+        console.warn('[ReminderModal] Audio context unlock failed.');
       }
+
+      // Play beep as secondary feedback
+      playBeep().catch(err => console.warn('[ReminderModal] Beep failed:', err));
 
       // STEP 0.5: Request Wake Lock
       if ('wakeLock' in navigator) {

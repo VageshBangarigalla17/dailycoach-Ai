@@ -43,7 +43,12 @@ export default function GlobalReminder() {
     if (!currentUser) return;
 
     const socketUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api$/, '') || 'http://localhost:5000';
-    let socket = io(socketUrl);
+    let socket = io(socketUrl, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10
+    });
 
     const initSocket = () => {
       if (!socket.connected) {
@@ -66,9 +71,16 @@ export default function GlobalReminder() {
           console.log('[GlobalReminder] WebSocket is disconnected. Forcing reconnect...');
           socket.connect();
         } else {
-          // Send a ping to verify connection isn't a zombie (if server supports it)
-          // Alternatively, just trust the connected state for now, socket.io handles internal pings
-          console.log('[GlobalReminder] WebSocket appears connected.');
+          // Send a ping to verify connection isn't a zombie
+          socket.emit('ping', {}, (response) => {
+            if (!response) {
+              console.log('[GlobalReminder] Ping failed, reconnecting...');
+              socket.disconnect();
+              socket.connect();
+            } else {
+              console.log('[GlobalReminder] WebSocket connection verified.');
+            }
+          });
         }
       }
     };
