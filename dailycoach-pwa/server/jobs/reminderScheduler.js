@@ -5,20 +5,26 @@ const admin = require('../config/firebaseAdmin');
 const sendPushNotification = async (fcmToken, type, schedule) => {
   if (!admin || !fcmToken) return;
 
-  const payload = {
-    data: {
-      type: type,
-      taskId: schedule._id.toString(),
-      taskName: schedule.taskName,
-      startTime: schedule.startTime,
-      endTime: schedule.endTime
-    }
+  const payloadData = {
+    type: String(type || ''),
+    taskId: String(schedule._id.toString() || ''),
+    taskName: String(schedule.taskName || ''),
+    startTime: String(schedule.startTime || ''),
+    endTime: String(schedule.endTime || '')
   };
 
   try {
     await admin.messaging().send({
       token: fcmToken,
-      data: payload.data
+      data: payloadData,
+      android: {
+        priority: 'high'
+      },
+      webpush: {
+        headers: {
+          Urgency: 'high'
+        }
+      }
     });
     console.log(`[FCM] Push notification (${type}) sent for "${schedule.taskName}" to token: ${fcmToken.substring(0, 10)}...`);
   } catch (error) {
