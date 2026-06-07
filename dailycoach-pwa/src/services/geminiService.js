@@ -33,7 +33,10 @@ try {
 // ---------------------------------------------------------------------------
 
 const FALLBACK_START = (name, taskName, startTime, endTime) =>
-  `Hey ${name}! It's ${startTime}. Time for ${taskName}. You have until ${endTime}. Don't skip it!`;
+  `Hey ${name}! It's ${startTime}. Time for ${taskName}. Are you ready to start? Say OK or YES.`;
+
+const FALLBACK_SECOND_CHANCE = (name, taskName) =>
+  `Hey ${name}! I'm checking in again on ${taskName}. Have you completed it now? Say YES or NO.`;
 
 const FALLBACK_FOLLOWUP = (name, taskName, endTime) =>
   `Hey ${name}! Your ${taskName} time just ended at ${endTime}. Did you complete it? Say YES or NO.`;
@@ -56,7 +59,11 @@ const FALLBACK_NO_RESPONSE = (name, taskName) =>
 // ---------------------------------------------------------------------------
 
 function buildStartPrompt(name, taskName, startTime, endTime) {
-  return `You are a personal AI life coach named DailyCoach. Speak directly to ${name} in a warm, encouraging, human voice — as if you're their close friend. Keep it SHORT (2-3 sentences max). It's ${startTime} now. Their task "${taskName}" is starting. It ends at ${endTime}. Remind them to start NOW and be motivating. Do NOT use markdown, emojis, or bullet points — just plain conversational speech.`;
+  return `You are a personal AI life coach named DailyCoach. Speak directly to ${name} in a warm, encouraging, human voice. Keep it SHORT (2-3 sentences max). It's ${startTime} now. Their task "${taskName}" is starting. It ends at ${endTime}. Ask them if they are ready to start, and tell them to say OK or YES. Do NOT use markdown, emojis, or bullet points — just plain conversational speech.`;
+}
+
+function buildSecondChancePrompt(name, taskName) {
+  return `You are a personal AI life coach named DailyCoach. Speak directly to ${name}. Keep it SHORT (2 sentences max). You are checking in again 10 minutes after their task "${taskName}" ended. Ask them if they have completed it now. Tell them to say YES or NO. Be encouraging. Do NOT use markdown, emojis, or bullet points.`;
 }
 
 function buildFollowupPrompt(name, taskName, endTime) {
@@ -98,6 +105,15 @@ export async function generateFollowupMessage(name, taskName, endTime) {
 }
 
 /**
+ * Generate a SECOND-CHANCE message (10 mins after end time).
+ * @returns {Promise<string>}
+ */
+export async function generateSecondChanceMessage(name, taskName) {
+  const fallback = FALLBACK_SECOND_CHANCE(name, taskName);
+  return callGemini(buildSecondChancePrompt(name, taskName), fallback);
+}
+
+/**
  * Generate a RESPONSE message after the user confirms/denies completion.
  * @param {'done'|'late'|'missed'|'no-response'} status
  * @returns {Promise<string>}
@@ -125,7 +141,7 @@ export async function generateResponseMessage(name, taskName, status) {
 // Internal: call Gemini with a timeout, fall back on failure
 // ---------------------------------------------------------------------------
 
-const GEMINI_TIMEOUT_MS = 5000;
+const GEMINI_TIMEOUT_MS = 3000;
 
 async function callGemini(prompt, fallback) {
   if (!model) {

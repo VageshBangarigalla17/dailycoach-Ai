@@ -40,6 +40,14 @@ export default function ScheduleBuilder() {
     return 'night';
   };
 
+  const formatTime12h = (time24) => {
+    if (!time24) return '';
+    const [h, m] = time24.split(':');
+    const date = new Date();
+    date.setHours(parseInt(h, 10), parseInt(m, 10), 0);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
   const toggleDay = (day) => {
     setSelectedDays(prev => 
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
@@ -225,7 +233,7 @@ export default function ScheduleBuilder() {
                 </div>
                 
                 <div className="text-sm font-mono text-slate-400 mb-3">
-                  {schedule.startTime} - {schedule.endTime}
+                  {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
                 </div>
                 
                 <div className="flex flex-wrap gap-1 mb-3">

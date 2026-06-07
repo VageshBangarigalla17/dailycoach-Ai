@@ -1,36 +1,121 @@
-const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
+const DailyLog = require('../models/DailyLog');
 
-const startScheduler = () => {
-  // Check for reminders every minute
-  cron.schedule('* * * * *', async () => {
-    try {
-      const now = new Date();
-      // Format as HH:mm
-      const currentTime = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-      const currentDay = now.getDay();
+const startScheduler = (io) => {
+  let lastTriggeredMinute = -1;
 
-      const dueSchedules = await Schedule.find({
-        isActive: true,
-        daysOfWeek: currentDay,
-        startTime: currentTime
-      }).populate('userId');
+  // Check for reminders exactly at the 0th second of every minute
+  // We use setInterval instead of node-cron to avoid noisy 'missed execution' warnings
+  // when the event loop is slightly delayed by DB operations.
+  setInterval(async () => {
+    const now = new Date();
+    
+    if (now.getSeconds() === 0 && now.getMinutes() !== lastTriggeredMinute) {
+      lastTriggeredMinute = now.getMinutes();
+      
+      try {
+        // Format as HH:mm
+        const currentTime = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+        const currentDay = now.getDay();
+        const todayStr = now.toISOString().split('T')[0];
 
-      if (dueSchedules.length > 0) {
-        dueSchedules.forEach(schedule => {
-          // In a real production app, we would send a push notification here via FCM
-          // using the user's fcmToken. For now, we log it.
-          if (schedule.userId && schedule.userId.enableNotifications) {
-            console.log(`[Scheduler] Reminder due for user ${schedule.userId.email}: Task "${schedule.taskName}" at ${schedule.startTime}`);
+        // 1. Check for START times (Send Push Notification + Socket Event)
+        const startSchedules = await Schedule.find({
+          isActive: true,
+          daysOfWeek: currentDay,
+          startTime: currentTime
+        }).populate('userId');
+
+        if (startSchedules.length > 0) {
+          startSchedules.forEach(schedule => {
+            if (schedule.userId && schedule.userId.enableNotifications) {
+              const userId = schedule.userId._id.toString();
+              console.log(`[Scheduler] START Reminder for user ${schedule.userId.email}: "${schedule.taskName}" at ${schedule.startTime}`);
+              // Emit instant websocket event
+              io.to(userId).emit('reminder:start', {
+                scheduleId: schedule._id,
+                taskName: schedule.taskName,
+                startTime: schedule.startTime,
+                endTime: schedule.endTime,
+                type: 'start'
+              });
+            }
+          });
+        }
+
+        // 2. Check for END times (Send Push Notification + Socket Event)
+        const endSchedules = await Schedule.find({
+          isActive: true,
+          daysOfWeek: currentDay,
+          endTime: currentTime
+        }).populate('userId');
+
+        if (endSchedules.length > 0) {
+          for (const schedule of endSchedules) {
+            if (schedule.userId && schedule.userId.enableNotifications) {
+              const userId = schedule.userId._id.toString();
+              console.log(`[Scheduler] FOLLOW-UP Reminder for user ${schedule.userId.email}: "${schedule.taskName}" ended at ${schedule.endTime}`);
+              // Emit instant websocket event
+              io.to(userId).emit('reminder:followup', {
+                scheduleId: schedule._id,
+                taskName: schedule.taskName,
+                startTime: schedule.startTime,
+                endTime: schedule.endTime,
+                type: 'followup'
+              });
+            }
           }
-        });
-      }
-    } catch (error) {
-      console.error('[Scheduler] Error running reminder job:', error);
-    }
-  });
+        }
 
-  console.log('[Scheduler] Reminder job started');
+        // 3. Check for SECOND-CHANCE times (endTime + 10 mins)
+        const parseTime = (timeStr) => {
+          const [h, m] = timeStr.split(':').map(Number);
+          return h * 60 + m;
+        };
+        
+        const currentMins = parseTime(currentTime);
+
+        const allSchedules = await Schedule.find({
+          isActive: true,
+          daysOfWeek: currentDay
+        }).populate('userId');
+
+        for (const schedule of allSchedules) {
+          if (!schedule.endTime) continue;
+          const endMins = parseTime(schedule.endTime);
+          
+          // If current time is any 10-minute interval past end time (e.g. +10, +20, +30)
+          if (currentMins > endMins && (currentMins - endMins) % 10 === 0) {
+            const existingLog = await DailyLog.findOne({
+              userId: schedule.userId._id,
+              scheduleId: schedule._id,
+              date: todayStr
+            });
+
+            // Only trigger if they haven't responded definitively
+            if (!existingLog || existingLog.status === 'active' || existingLog.status === 'no-response') {
+               if (schedule.userId && schedule.userId.enableNotifications) {
+                 const userId = schedule.userId._id.toString();
+                 console.log(`[Scheduler] SECOND-CHANCE Reminder (Loop) for user ${schedule.userId.email}: "${schedule.taskName}" ended ${currentMins - endMins} mins ago`);
+                 io.to(userId).emit('reminder:loop', {
+                   scheduleId: schedule._id,
+                   taskName: schedule.taskName,
+                   startTime: schedule.startTime,
+                   endTime: schedule.endTime,
+                   type: 'loop'
+                 });
+               }
+            }
+          }
+        }
+
+      } catch (error) {
+        console.error('[Scheduler] Error running reminder job:', error);
+      }
+    }
+  }, 500); // Check every half-second to guarantee we hit the 0th second exactly
+
+  console.log('[Scheduler] Reminder job started with precise 0th-second setInterval triggers');
 };
 
 module.exports = startScheduler;

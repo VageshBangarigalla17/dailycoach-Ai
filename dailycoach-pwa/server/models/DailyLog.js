@@ -6,8 +6,9 @@ const dailyLogSchema = new mongoose.Schema({
   date: { type: String, required: true }, // YYYY-MM-DD
   scheduledTime: { type: String, required: true }, // HH:mm
   actualCompletionTime: { type: String, default: null }, // HH:mm
-  status: { type: String, enum: ['done', 'late', 'missed', 'no-response'], required: true },
-  voiceResponse: { type: String, enum: ['yes', 'no', 'timeout'], required: true },
+  status: { type: String, enum: ['active', 'done', 'late', 'missed', 'no-response'], required: true },
+  voiceResponse: { type: String, default: 'no-response' },
+  reminderType: { type: String, enum: ['start', 'followup', 'second-chance', 'loop'], default: 'start' },
   notificationSentAt: { type: Date },
   completedAt: { type: Date, default: null },
   notes: { type: String }

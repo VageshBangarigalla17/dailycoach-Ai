@@ -1,11 +1,12 @@
 const DailyLog = require('../models/DailyLog');
+const UserStats = require('../models/UserStats');
 
 const logTaskCompletion = async (req, res, next) => {
   try {
-    const { scheduleId, date, status, voiceResponse, completedAt, notes } = req.body;
+    const { scheduleId, date, status, voiceResponse, completedAt, notes, reminderType } = req.body;
 
-    if (!scheduleId || !date || !status || !voiceResponse) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    if (!scheduleId || !date || !status) {
+      return res.status(400).json({ success: false, message: 'Missing required fields: scheduleId, date, status' });
     }
 
     // Upsert the log for this user/schedule/date combination
@@ -13,18 +14,29 @@ const logTaskCompletion = async (req, res, next) => {
       { userId: req.user._id, scheduleId, date },
       { 
         status, 
-        voiceResponse, 
-        completedAt: completedAt || new Date(),
+        voiceResponse: voiceResponse || 'no-response', 
+        completedAt: completedAt || (status === 'missed' ? null : new Date()),
         notes,
-        scheduledTime: req.body.scheduledTime || '00:00' // Ensure we have a fallback or pass it
+        reminderType: reminderType || 'start',
+        scheduledTime: req.body.scheduledTime || '00:00'
       },
-      { new: true, upsert: true, runValidators: true }
+      { returnDocument: 'after', upsert: true, runValidators: true }
     );
 
     res.status(201).json({
       success: true,
       log: log.toJSON()
     });
+    
+    // Asynchronously update UserStats total tasks
+    if (status === 'done' || status === 'late') {
+      UserStats.findOneAndUpdate(
+        { userId: req.user._id },
+        { $inc: { totalTasksCompleted: 1 } },
+        { upsert: true, returnDocument: 'after' }
+      ).catch(err => console.error("Error updating user stats totalTasksCompleted:", err));
+    }
+    
   } catch (error) {
     next(error);
   }

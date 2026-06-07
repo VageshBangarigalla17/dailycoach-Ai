@@ -6,6 +6,7 @@ import ScheduleBuilder from './pages/ScheduleBuilder';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Navbar from './components/Navbar';
+import GlobalReminder from './components/GlobalReminder';
 
 function ProtectedRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -15,6 +16,7 @@ function ProtectedRoute({ children }) {
   
   return (
     <div className="pb-20">
+      <GlobalReminder />
       {children}
       <Navbar />
     </div>

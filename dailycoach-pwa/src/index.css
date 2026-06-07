@@ -2,14 +2,14 @@
 
 @layer base {
   :root {
-    --color-background: #0F172A;
-    --color-morning: #3B82F6;
-    --color-afternoon: #F97316;
-    --color-evening: #8B5CF6;
-    --color-night-dark: #1E293B;
-    --color-done: #22C55E;
-    --color-late: #EAB308;
-    --color-missed: #EF4444;
+    --color-background: #09090b;
+    --color-morning: #0ea5e9;
+    --color-afternoon: #f59e0b;
+    --color-evening: #a855f7;
+    --color-night-dark: #18181b;
+    --color-done: #10b981;
+    --color-late: #eab308;
+    --color-missed: #ef4444;
   }
 }
 
@@ -26,7 +26,7 @@
 
 body {
   background-color: var(--color-background);
-  color: #f1f5f9;
+  color: #f8fafc;
   font-family: ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

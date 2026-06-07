@@ -14,6 +14,7 @@ export function useVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [message, setMessage] = useState('');
+  const [voiceError, setVoiceError] = useState(null);
   const mountedRef = useRef(true);
 
   // Cleanup on unmount
@@ -26,18 +27,33 @@ export function useVoice() {
   }, []);
 
   /**
+   * Play a short beep to unlock audio context (must be called from user gesture on mobile).
+   */
+  const playBeep = useCallback(async () => {
+    try {
+      await voice.playBeep(150, 440);
+    } catch (error) {
+      console.warn('[useVoice] playBeep failed:', error);
+    }
+  }, []);
+
+  /**
    * Speak text aloud using the real Web Speech API TTS.
    * Updates isSpeaking / message state while active.
    */
-  const speak = useCallback(async (text) => {
+  const speak = useCallback(async (text, options = {}) => {
     try {
       if (!mountedRef.current) return;
       setMessage(text);
       setIsSpeaking(true);
+      setVoiceError(null);
       console.log('[useVoice] Speaking:', text.substring(0, 60));
-      await voice.speak(text);
+      await voice.speak(text, options);
     } catch (error) {
       console.error('[useVoice] speak error:', error);
+      if (mountedRef.current) {
+        setVoiceError('Voice playback failed. Using text display instead.');
+      }
     } finally {
       if (mountedRef.current) {
         setIsSpeaking(false);
@@ -54,6 +70,7 @@ export function useVoice() {
       if (!mountedRef.current) return 'no-response';
       setIsListening(true);
       setMessage('Listening… say YES or NO');
+      setVoiceError(null);
       console.log('[useVoice] Listening started, timeout:', timeout);
       const transcript = await voice.listen({ timeout });
       if (mountedRef.current) {
@@ -62,6 +79,9 @@ export function useVoice() {
       return transcript;
     } catch (error) {
       console.error('[useVoice] listen error:', error);
+      if (mountedRef.current) {
+        setVoiceError('Microphone not available. Please use the buttons.');
+      }
       return 'no-response';
     } finally {
       if (mountedRef.current) {
@@ -88,7 +108,20 @@ export function useVoice() {
       return msg;
     } catch (error) {
       console.error('[useVoice] generateStartMessage error:', error);
-      return `Hey ${userName}! It's ${startTime}. Time for ${taskName}. You have until ${endTime}. Don't skip it!`;
+      return `Hey ${userName}! It's ${startTime}. Time for ${taskName}. Are you ready to start? Say OK or YES.`;
+    }
+  }, []);
+
+  /**
+   * Generate an AI second-chance message via Gemini (with fallback).
+   */
+  const generateSecondChanceMessage = useCallback(async (userName, taskName) => {
+    try {
+      const msg = await gemini.generateSecondChanceMessage(userName, taskName);
+      return msg;
+    } catch (error) {
+      console.error('[useVoice] generateSecondChanceMessage error:', error);
+      return `Hey ${userName}! I'm checking in again on ${taskName}. Have you completed it now? Say YES or NO.`;
     }
   }, []);
 
@@ -114,8 +147,8 @@ export function useVoice() {
       return msg;
     } catch (error) {
       console.error('[useVoice] generateResponseMessage error:', error);
-      return status === 'done'
-        ? `Great job, ${userName}! ${taskName} marked as done!`
+      return status === 'done' || status === 'late'
+        ? `Great job, ${userName}! ${taskName} marked as ${status === 'late' ? 'completed late' : 'done'}!`
         : `No worries, ${userName}. I'll mark ${taskName} as missed for now.`;
     }
   }, []);
@@ -124,12 +157,15 @@ export function useVoice() {
     isSpeaking,
     isListening,
     message,
+    voiceError,
     speak,
     listen,
     stop,
     generateStartMessage,
     generateFollowupMessage,
+    generateSecondChanceMessage,
     generateResponseMessage,
+    playBeep,
     isTTSSupported: voice.isTTSSupported(),
     isSTTSupported: voice.isSTTSupported(),
   };

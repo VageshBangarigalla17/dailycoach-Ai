@@ -72,7 +72,7 @@ const updateSchedule = async (req, res, next) => {
     const schedule = await Schedule.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
       req.body,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
     
     if (!schedule) {

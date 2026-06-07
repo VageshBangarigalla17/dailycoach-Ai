@@ -21,12 +21,7 @@ const getISTTimeFormatted = (dateObj = new Date()) => {
   return `${hours}:${minutes}`;
 };
 
-// Helper to get time X minutes ago in IST
-const getISTTimeMinutesAgo = (minutes) => {
-  const now = new Date();
-  const past = new Date(now.getTime() - minutes * 60000);
-  return getISTTimeFormatted(past);
-};
+
 
 // Helper to get current day name
 const getCurrentDayName = () => {
@@ -42,7 +37,6 @@ exports.checkReminders = functions.pubsub
     try {
       console.log("Running checkReminders...");
       const currentTime = getISTTimeFormatted();
-      const followUpTime = getISTTimeMinutesAgo(5);
       const currentDay = getCurrentDayName();
       const todayDateStr = getISTDateString();
       
@@ -97,8 +91,8 @@ exports.checkReminders = functions.pubsub
                 }
               }
 
-              // 2. Check for 5-min follow-up
-              if (scheduleData.startTime === followUpTime) {
+              // 2. Check for END-TIME follow-up — fires when the task window closes
+              if (scheduleData.endTime === currentTime) {
                 const logRef = db.doc(`users/${userId}/dailyLogs/${todayDateStr}_${scheduleId}`);
                 const logDoc = await logRef.get();
 
@@ -106,7 +100,7 @@ exports.checkReminders = functions.pubsub
                   const payload = {
                     notification: {
                       title: "DailyCoach Follow-up",
-                      body: `Did you complete: ${scheduleData.taskName || "Task"}?`,
+                      body: `Your ${scheduleData.taskName || "Task"} time just ended. Did you complete it?`,
                     },
                     data: {
                       taskId: String(scheduleId || ""),
@@ -117,7 +111,42 @@ exports.checkReminders = functions.pubsub
                     },
                     token: fcmToken
                   };
-                  console.log(`Sending follow-up to ${userId} for task ${scheduleData.taskName}`);
+                  console.log(`Sending end-time follow-up to ${userId} for task ${scheduleData.taskName} (endTime: ${scheduleData.endTime})`);
+                  await admin.messaging().send(payload);
+                }
+              }
+
+              // 3. Check for SECOND-CHANCE follow-up (Loop every 10 mins)
+              const parseTime = (timeStr) => {
+                if (!timeStr) return 0;
+                const [h, m] = timeStr.split(':').map(Number);
+                return h * 60 + m;
+              };
+              
+              const currentMins = parseTime(currentTime);
+              const endMins = parseTime(scheduleData.endTime);
+
+              if (currentMins > endMins && (currentMins - endMins) % 10 === 0) {
+                const logRef = db.doc(`users/${userId}/dailyLogs/${todayDateStr}_${scheduleId}`);
+                const logDoc = await logRef.get();
+                
+                // If no log exists, or it's 'active' or 'no-response', fire the second chance
+                if (!logDoc.exists || logDoc.data().status === 'active' || logDoc.data().status === 'no-response') {
+                  const payload = {
+                    notification: {
+                      title: "DailyCoach Final Check-in",
+                      body: `Checking in on ${scheduleData.taskName || "Task"}. Have you completed it yet?`,
+                    },
+                    data: {
+                      taskId: String(scheduleId || ""),
+                      taskName: String(scheduleData.taskName || ""),
+                      startTime: String(scheduleData.startTime || ""),
+                      endTime: String(scheduleData.endTime || ""),
+                      type: "second-chance"
+                    },
+                    token: fcmToken
+                  };
+                  console.log(`Sending second-chance follow-up to ${userId} for task ${scheduleData.taskName}`);
                   await admin.messaging().send(payload);
                 }
               }

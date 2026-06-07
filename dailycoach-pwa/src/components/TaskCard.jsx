@@ -2,7 +2,15 @@ import React from 'react';
 import { Clock } from 'lucide-react';
 
 export default function TaskCard({ task, log, onClick, isCurrent }) {
+  const formatTime12h = (time24) => {
+    if (!time24) return '';
+    const [h, m] = time24.split(':');
+    const date = new Date();
+    date.setHours(parseInt(h, 10), parseInt(m, 10), 0);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
   const getStatusColor = () => {
+    if (log?.status === 'active') return 'bg-morning text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]';
     if (log?.status === 'done') return 'bg-done text-white';
     if (log?.status === 'late') return 'bg-late text-slate-900';
     if (log?.status === 'missed') return 'bg-missed text-white';
@@ -21,6 +29,7 @@ export default function TaskCard({ task, log, onClick, isCurrent }) {
   };
 
   const getStatusText = () => {
+    if (log?.status === 'active') return 'In Progress';
     if (log?.status === 'done') return 'Done';
     if (log?.status === 'late') return 'Late';
     if (log?.status === 'missed') return 'Missed';
@@ -36,7 +45,7 @@ export default function TaskCard({ task, log, onClick, isCurrent }) {
         border border-slate-700/50 border-l-4 ${getBorderColor()}
         p-4 mb-4 cursor-pointer transition-all duration-300 ease-in-out
         hover:bg-slate-800/80 hover:shadow-lg
-        ${isCurrent ? 'ring-2 ring-morning/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse' : ''}
+        ${isCurrent || log?.status === 'active' ? 'ring-2 ring-morning/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse' : ''}
       `}
     >
       <div className="flex justify-between items-start mb-2">
@@ -51,7 +60,7 @@ export default function TaskCard({ task, log, onClick, isCurrent }) {
       <div className="flex items-center text-slate-400">
         <Clock size={14} className="mr-1.5" />
         <span className="font-mono text-sm">
-          {task.startTime} - {task.endTime}
+          {formatTime12h(task.startTime)} - {formatTime12h(task.endTime)}
         </span>
       </div>
     </div>

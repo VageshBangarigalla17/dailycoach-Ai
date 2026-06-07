@@ -24,7 +24,7 @@ const updateProfile = async (req, res, next) => {
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { name, preferredVoiceGender, preferredVoiceSpeed, enableNotifications, timezone },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).select('-passwordHash');
 
     if (!user) {
