@@ -13,7 +13,7 @@ const initFirebaseAdmin = () => {
     // Check if local file exists (development/deployment where file is copied)
     if (fs.existsSync(serviceAccountPath)) {
       console.log('[FirebaseAdmin] Initializing from serviceAccountKey.json');
-      const serviceAccount = require('./serviceAccountKey.json');
+      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
