@@ -42,7 +42,12 @@ export default function GlobalReminder() {
   useEffect(() => {
     if (!currentUser) return;
 
-    const socketUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api$/, '') || 'http://localhost:5000';
+    const devApiUrl = typeof window !== 'undefined' ? localStorage.getItem('dev_api_url') : null;
+    let fallbackSocketUrl = import.meta.env.VITE_SOCKET_URL || (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api$/, '') || 'http://localhost:5000';
+    if (devApiUrl) {
+      fallbackSocketUrl = devApiUrl.replace(/\/api$/, '');
+    }
+    const socketUrl = fallbackSocketUrl;
     let socket = io(socketUrl, {
       reconnection: true,
       reconnectionDelay: 1000,

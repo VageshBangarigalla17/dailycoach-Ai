@@ -20,7 +20,8 @@ export function AuthProvider({ children }) {
       localStorage.setItem('dailycoach_user', JSON.stringify(userWithToken));
       return userWithToken;
     } catch (error) {
-      throw error.response?.data?.message || 'Error signing up';
+      const errorMsg = error.response?.data?.message || error.message || error.toString();
+      throw new Error(`[Auth] ${errorMsg}`);
     }
   }
 
@@ -33,7 +34,8 @@ export function AuthProvider({ children }) {
       localStorage.setItem('dailycoach_user', JSON.stringify(userWithToken));
       return userWithToken;
     } catch (error) {
-      throw error.response?.data?.message || 'Error signing in';
+      const errorMsg = error.response?.data?.message || error.message || error.toString();
+      throw new Error(`[Auth] ${errorMsg}`);
     }
   }
 

@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const devApiUrl = typeof window !== 'undefined' ? localStorage.getItem('dev_api_url') : null;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: devApiUrl || import.meta.env.VITE_API_BASE_URL || '/api',
 });
 
 // Add a request interceptor

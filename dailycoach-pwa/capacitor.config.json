@@ -1,0 +1,8 @@
+{
+  "appId": "com.dailycoach.app",
+  "appName": "DailyCoach",
+  "webDir": "dist",
+  "server": {
+    "cleartext": true
+  }
+}

@@ -29,6 +29,12 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - IP: ${req.ip}`);
+  next();
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/schedules', scheduleRoutes);

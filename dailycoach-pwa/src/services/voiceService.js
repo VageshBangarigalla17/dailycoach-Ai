@@ -310,10 +310,23 @@ let recognitionInstance = null;
  * @returns {Promise<string>} The recognised transcript or 'no-response'.
  */
 export function listen(options = {}) {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     try {
       if (!SpeechRecognition) {
         console.warn('[voiceService] SpeechRecognition not supported — returning no-response.');
+        resolve('no-response');
+        return;
+      }
+
+      // Explicitly request microphone permission (required for Capacitor Android WebViews)
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // We don't actually need the stream for SpeechRecognition, just the permission
+          stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err) {
+        console.error('[voiceService] Microphone permission denied via getUserMedia:', err);
         resolve('no-response');
         return;
       }

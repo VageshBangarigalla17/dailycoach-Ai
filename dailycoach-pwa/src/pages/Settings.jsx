@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
-import { User, Volume2, Bell, LogOut, Save, Play, CheckCircle } from 'lucide-react';
+import { User, Volume2, Bell, LogOut, Save, Play, CheckCircle, Smartphone, Battery, Circle } from 'lucide-react';
 import * as voiceService from '../services/voiceService';
 import { requestNotificationPermission, getFCMToken, saveFCMToken } from '../services/notificationService';
+import BatteryOptimizationSection from '../components/BatteryOptimizationSection';
+import { registerPlugin } from '@capacitor/core';
+
+// Capacitor plugin bridge — safe no-op in browser
+const NotificationService = registerPlugin('NotificationService');
 
 export default function Settings() {
   const { currentUser, signOut } = useAuth();
@@ -17,6 +22,63 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // ── Android native service state (only active inside Capacitor wrapper) ───
+  const isNativeAndroid = Boolean(window.Capacitor?.isNativePlatform());
+  const [serviceRunning, setServiceRunning] = useState(false);
+  const [serviceLoading, setServiceLoading] = useState(false);
+
+  useEffect(() => {
+    if (isNativeAndroid) {
+      checkNativeServiceStatus();
+    }
+  }, [isNativeAndroid]);
+
+  const checkNativeServiceStatus = async () => {
+    try {
+      const result = await NotificationService.isServiceRunning();
+      setServiceRunning(result.running);
+      console.log('[Native] Service running:', result.running);
+    } catch (err) {
+      console.error('[Native] isServiceRunning error:', err);
+    }
+  };
+
+  const handleStartNativeService = async () => {
+    setServiceLoading(true);
+    try {
+      await NotificationService.startBackgroundService();
+      setServiceRunning(true);
+      console.log('✅ [Native] Background service started');
+    } catch (err) {
+      console.error('❌ [Native] Failed to start service:', err);
+    } finally {
+      setServiceLoading(false);
+    }
+  };
+
+  const handleStopNativeService = async () => {
+    setServiceLoading(true);
+    try {
+      await NotificationService.stopBackgroundService();
+      setServiceRunning(false);
+      console.log('✅ [Native] Background service stopped');
+    } catch (err) {
+      console.error('❌ [Native] Failed to stop service:', err);
+    } finally {
+      setServiceLoading(false);
+    }
+  };
+
+  const handleBatteryExemption = async () => {
+    try {
+      await NotificationService.requestBatteryOptimizationExemption();
+      console.log('✅ [Native] Battery optimization settings opened');
+    } catch (err) {
+      console.error('❌ [Native] Battery exemption error:', err);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Sync state if currentUser changes
   useEffect(() => {
@@ -245,6 +307,58 @@ export default function Settings() {
             </button>
           </div>
         </section>
+
+        {/* Android Native Background Service — only visible inside Capacitor APK */}
+        {isNativeAndroid && (
+          <section className="bg-slate-800/50 backdrop-blur-md p-5 rounded-2xl border border-slate-700">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center text-white">
+                <Smartphone size={20} className="mr-2 text-morning" />
+                <h2 className="text-lg font-bold">Background Service</h2>
+              </div>
+              {/* Live status pill */}
+              <span className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${
+                serviceRunning
+                  ? 'bg-done/20 border-done/50 text-done'
+                  : 'bg-missed/20 border-missed/50 text-missed'
+              }`}>
+                <Circle size={7} fill="currentColor" />
+                {serviceRunning ? 'Running' : 'Stopped'}
+              </span>
+            </div>
+
+            <p className="text-sm text-slate-400 mb-4">
+              The background service keeps DailyCoach alive for 100% reliable reminders, even when the app is minimized.
+            </p>
+
+            {/* Start / Stop / Refresh buttons */}
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={handleStartNativeService}
+                disabled={serviceRunning || serviceLoading}
+                className="flex-1 py-2.5 bg-done/20 hover:bg-done/30 border border-done/50 text-done font-semibold rounded-xl text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {serviceLoading && !serviceRunning ? '...' : 'Start'}
+              </button>
+              <button
+                onClick={handleStopNativeService}
+                disabled={!serviceRunning || serviceLoading}
+                className="flex-1 py-2.5 bg-missed/20 hover:bg-missed/30 border border-missed/50 text-missed font-semibold rounded-xl text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {serviceLoading && serviceRunning ? '...' : 'Stop'}
+              </button>
+              <button
+                onClick={checkNativeServiceStatus}
+                disabled={serviceLoading}
+                className="px-4 py-2.5 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600 text-slate-300 font-medium rounded-xl text-sm transition-colors"
+              >
+                ↻
+              </button>
+            </div>
+
+            <BatteryOptimizationSection />
+          </section>
+        )}
 
         {/* Notifications Section */}
         <section className="bg-slate-800/50 backdrop-blur-md p-5 rounded-2xl border border-slate-700">
